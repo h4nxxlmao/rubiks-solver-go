@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>rubiks-solver-go demo</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        font: 16px/1.5 system-ui, sans-serif;
+        margin: 0;
+        padding: 32px;
+        background: #0b0c0f;
+        color: #f2f4f8;
+      }
+      h1 { font-size: 28px; margin: 0 0 8px; }
+      p { color: #a2a9b6; }
+      code, textarea { font-family: ui-monospace, monospace; }
+      textarea {
+        width: 100%;
+        max-width: 680px;
+        height: 56px;
+        background: #14161c;
+        color: #f2f4f8;
+        border: 1px solid #2a2d36;
+        border-radius: 10px;
+        padding: 10px;
+        resize: vertical;
+      }
+      button {
+        background: #4c86f0;
+        color: #06121f;
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 18px;
+        font-weight: 600;
+        font-size: 15px;
+        cursor: pointer;
+      }
+      #out { margin-top: 20px; white-space: pre-wrap; color: #a2a9b6; }
+    </style>
+  </head>
+  <body>
+    <h1>rubiks-solver-go</h1>
+    <p>Scrambled facelet string (54 characters, Kociemba order U R F D L B):</p>
+    <textarea id="state">UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB</textarea>
+    <p><button id="solve" type="button">Solve</button></p>
+    <div id="out">Idle.</div>
+
+    <script>
+      const worker = new Worker("worker.js");
+      const out = document.getElementById("out");
+      let nextId = 1;
+      const pending = new Map();
+
+      worker.addEventListener("message", (event) => {
+        const message = event.data;
+        if (message.type === "progress") {
+          out.textContent = `Building tables: ${Math.round(message.value * 100)}%`;
+          return;
+        }
+        const resolve = pending.get(message.id);
+        if (resolve) {
+          pending.delete(message.id);
+          resolve(message);
+        }
+      });
+
+      function solve(facelets) {
+        const id = nextId++;
+        return new Promise((resolve) => {
+          pending.set(id, resolve);
+          worker.postMessage({ id, facelets });
+        });
+      }
+
+      document.getElementById("solve").addEventListener("click", async () => {
+        out.textContent = "Solving...";
+        const facelets = document.getElementById("state").value.trim();
+        const result = await solve(facelets);
+        out.textContent = result.error
+          ? `Error: ${result.error}`
+          : `${result.solution.split(" ").length} moves\n${result.solution}`;
+      });
+    </script>
+  </body>
+</html>
