@@ -206,7 +206,19 @@ A few practical notes:
 - **Bound the work.** Pass `maxDepth` (default 22) and `timeoutMs` so a UI can
   always bail out with a message instead of hanging.
 
-## 8. Troubleshooting
+## 8. Rotated positions
+
+If your UI lets people turn middle layers (`M E S`) or the whole cube
+(`x y z`), the centres end up permuted, and the fixed-centre facelet model
+cannot represent that. There are two ways to deal with it:
+
+- **Let the solver handle it.** `solve()` re-orients the input to the standard
+  centres and returns a solution in that frame. Your UI should turn the
+  displayed cube to match before playing the moves.
+- **Normalise on your side first.** If you need the rotation itself (to animate
+  it, say), find it before calling `solve()` and pass the standard-centre state.
+
+## 9. Troubleshooting
 
 - **`Go 1.22+ was not found on PATH`** - install Go or set `GO_BINARY` to the
   `go` executable and re-run `node build.mjs`.
@@ -218,7 +230,7 @@ A few practical notes:
 - **`No solution within limits.`** - the position is not reachable, or the
   timeout is too small. Re-check the facelets.
 
-## 9. Where to go next
+## 10. Where to go next
 
 - Read `main.go`: geometry, the cubie model, coordinate encoding, pruning-table
   breadth-first search and the two-phase search are all there, commented.

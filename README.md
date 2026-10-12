@@ -74,6 +74,18 @@ UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB
 Moves use standard notation: `U D L R F B`, `U'` for counter-clockwise, `U2`
 for a half turn, `M E S` for slices, `x y z` for whole-cube rotations.
 
+## Rotated positions
+
+Slices (`M E S`) and whole-cube turns (`x y z`) move the centres, which the
+fixed-centre facelet model cannot express. The solver accepts those positions
+anyway: it re-orients the input to the standard centres before searching, so a
+cube scrambled with slices still solves. The solution that comes back is written
+in that standard orientation, so a caller that draws the cube should turn it to
+match before playing the moves.
+
+Genuinely invalid positions (wrong sticker counts, a single flipped edge, two
+swapped pieces) are still rejected with an `error`.
+
 ## How it works
 
 Phase 1 reduces the cube to the coordinates `(corner orientation, edge

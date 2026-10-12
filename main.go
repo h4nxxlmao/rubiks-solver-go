@@ -6,11 +6,11 @@
 // so a move here means the same thing as a move there. Coordinates and pruning
 // tables follow the classic two-phase formulation:
 //
-//   phase 1: corner orientation (2187), edge orientation (2048), U/D-edge
-//            slice (495) -> reach orientation-solved + slice-solved
-//   phase 2: corner permutation (40320), U/D-edge permutation (40320),
-//            middle-edge permutation (24) -> reach fully solved using only
-//            U D R2 L2 F2 B2
+//	phase 1: corner orientation (2187), edge orientation (2048), U/D-edge
+//	         slice (495) -> reach orientation-solved + slice-solved
+//	phase 2: corner permutation (40320), U/D-edge permutation (40320),
+//	         middle-edge permutation (24) -> reach fully solved using only
+//	         U D R2 L2 F2 B2
 //
 // Tables are built once at init and reported back to JS as progress so the
 // worker can show a bar without binary search heuristics.
@@ -45,8 +45,8 @@ var faceDefs = []struct {
 }
 
 var (
-	faceletPos  [54]vec3
-	faceletNorm [54]vec3
+	faceletPos   [54]vec3
+	faceletNorm  [54]vec3
 	faceletByKey [729]int
 )
 
@@ -811,6 +811,92 @@ func buildPhase2Prune() {
 	reportProgress(0.99)
 }
 
+// --------------------------------------------------------------------------
+// orientation
+//
+// Slices (M E S) and whole-cube turns (x y z) move the centres, which the
+// fixed-centre facelet model cannot express. Accept such a position by
+// re-orienting it to the standard centres first. The solution is then expressed
+// with U R F D L B where they started, so a caller that draws the cube should
+// turn it to match before playing the moves.
+// --------------------------------------------------------------------------
+
+var (
+	rotPerm     [9][54]int
+	orientPerms [][54]int
+	orientReady bool
+)
+
+func initOrientations() {
+	if orientReady {
+		return
+	}
+	orientReady = true
+
+	rotDefs := []moveDef{
+		{"x", 0, -1, func(x, y, z int) bool { return true }},
+		{"y", 1, -1, func(x, y, z int) bool { return true }},
+		{"z", 2, -1, func(x, y, z int) bool { return true }},
+	}
+	for i, def := range rotDefs {
+		base := buildFaceletPerm(def)
+		rotPerm[i*3] = base
+		rotPerm[i*3+1] = composePerm(base, base)
+		rotPerm[i*3+2] = invertPerm(base)
+	}
+
+	var identity [54]int
+	for i := range identity {
+		identity[i] = i
+	}
+
+	seen := map[string]bool{centreKey(solvedFacelets): true}
+	orientPerms = [][54]int{identity}
+
+	// The 24 orientations, as x^i y^j z^k, de-duplicated by centre layout.
+	for xi := 0; xi < 4; xi++ {
+		for yi := 0; yi < 4; yi++ {
+			for zi := 0; zi < 2; zi++ {
+				perm := identity
+				for t := 0; t < xi; t++ {
+					perm = composePerm(perm, rotPerm[0])
+				}
+				for t := 0; t < yi; t++ {
+					perm = composePerm(perm, rotPerm[3])
+				}
+				for t := 0; t < zi; t++ {
+					perm = composePerm(perm, rotPerm[6])
+				}
+				key := centreKey(applyPerm(solvedFacelets, perm))
+				if !seen[key] {
+					seen[key] = true
+					orientPerms = append(orientPerms, perm)
+				}
+			}
+		}
+	}
+}
+
+func centreKey(state string) string {
+	return string([]byte{state[4], state[13], state[22], state[31], state[40], state[49]})
+}
+
+// orientToStandard returns the same physical position with the centres reading
+// U R F D L B, or the input unchanged when no rotation achieves that.
+func orientToStandard(state string) string {
+	initOrientations()
+	if centreKey(state) == "URFDLB" {
+		return state
+	}
+	for _, perm := range orientPerms {
+		candidate := applyPerm(state, perm)
+		if centreKey(candidate) == "URFDLB" {
+			return candidate
+		}
+	}
+	return state
+}
+
 var tablesReady bool
 
 func buildAll() {
@@ -822,6 +908,7 @@ func buildAll() {
 	initCubieTables()
 	initCubieMoves()
 	initSliceTables()
+	initOrientations()
 	goalSlice = sliceIdx(solvedCubie())
 	buildCoordinateMoves()
 	buildPhase1Prune()
@@ -1058,6 +1145,7 @@ func jsObj() map[string]interface{} {
 				timeoutMs = args[2].Int()
 			}
 			buildAll()
+			facelets = orientToStandard(facelets)
 			c, err := parseFacelets(facelets)
 			if err != "" {
 				res["error"] = err
@@ -1203,10 +1291,10 @@ func runSelfTest(n int) map[string]interface{} {
 		avg = total.Milliseconds() / int64(n)
 	}
 	return map[string]interface{}{
-		"passed":    passed,
-		"failed":    failed,
-		"avgMs":     avg,
-		"worstMs":   worst.Milliseconds(),
+		"passed":  passed,
+		"failed":  failed,
+		"avgMs":   avg,
+		"worstMs": worst.Milliseconds(),
 	}
 }
 
